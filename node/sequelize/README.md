@@ -9,7 +9,7 @@ Install depedencies by running:
 $ npm install
 ```
 
-Create Database
+Ensure the database exists (the `prestart` hook already runs `node ensure-database.js`, but you can double-check manually if you prefer):
 ```
 ysqlsh -c "CREATE DATABASE ysql_sequelize"
 ```
@@ -26,11 +26,17 @@ $ DEBUG=sequelize:* npm start
 
 # Customizing
 
-You can customize the various options by changing the following variables in the file [config/config.json](https://github.com/YugaByte/orm-examples/blob/master/node/sequelize/config/config.json). The descriptions and default values are listed below.
+Most settings come from environment variables (e.g. `YB_HOSTS`, `YB_LOAD_BALANCE`) or the file [config/config.json](https://github.com/YugaByte/orm-examples/blob/master/node/sequelize/config/config.json). The descriptions and default values are listed below.
 
 | Properties    | Description   | Default |
 | ------------- | ------------- | ------- |
 | `host`  | The database host. | `localhost`  |
 | `username` | The username to connect to the database. | `postgres` |
 | `password` | The password to connect to the database. Leave blank for the password. | - |
+| `database` | Database name. | `ysql_sequelize` |
 
+Environment examples:
+```
+export YB_HOSTS=127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436
+export YB_LOAD_BALANCE=any
+```
