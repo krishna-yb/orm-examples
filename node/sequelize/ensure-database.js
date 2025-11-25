@@ -17,7 +17,7 @@ const path = require('path');
 const env = process.env.NODE_ENV || 'development';
 const baseConfig = require(path.join(__dirname, 'config', 'config.json'))[env];
 
-// Parse YB_HOSTS or use config defaults
+// Parse PGHOSTS (custom, comma-separated) or PGHOST (standard, single host) or use config defaults
 const parseHosts = (rawHosts) => {
   if (!rawHosts) {
     return [{ host: baseConfig.host || '127.0.0.1', port: Number(baseConfig.port) || 5436 }];
@@ -32,13 +32,24 @@ const parseHosts = (rawHosts) => {
     });
 };
 
-const HOSTS = process.env.YB_HOSTS 
-  ? parseHosts(process.env.YB_HOSTS)
-  : parseHosts(`${baseConfig.host || '127.0.0.1'}:${baseConfig.port || 5436}`);
+const HOSTS = (() => {
+  // Check for PGHOSTS first (comma-separated list), then PGHOST (single host)
+  if (process.env.PGHOSTS) {
+    return parseHosts(process.env.PGHOSTS);
+  }
+  
+  if (process.env.PGHOST) {
+    const port = process.env.PGPORT || baseConfig.port || '5436';
+    return parseHosts(`${process.env.PGHOST}:${port}`);
+  }
+  
+  // Fall back to config
+  return parseHosts(`${baseConfig.host || '127.0.0.1'}:${baseConfig.port || 5436}`);
+})();
 
-const database = baseConfig.database || 'ysql_sequelize';
-const username = baseConfig.username || 'yugabyte';
-const password = baseConfig.password || 'yugabyte';
+const database = process.env.PGDATABASE || baseConfig.database || 'ysql_sequelize';
+const username = process.env.PGUSER || baseConfig.username || 'yugabyte';
+const password = process.env.PGPASSWORD || baseConfig.password || 'yugabyte';
 
 async function ensureDatabase() {
   // Try to connect to the first host using the default 'yugabyte' database
