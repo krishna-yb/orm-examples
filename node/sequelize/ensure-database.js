@@ -5,6 +5,21 @@
  * Similar to "CREATE DATABASE IF NOT EXISTS" behavior.
  */
 
+const path = require('path');
+
+// Set YugabyteDB smart driver environment variables before loading pg client
+// This ensures load balancing is enabled for database creation
+const ensureEnv = (key, value) => {
+  if (typeof value !== 'undefined' && value !== null && value !== '' && !process.env[key]) {
+    process.env[key] = String(value);
+  }
+};
+
+// Enable load balancing by default
+ensureEnv('PGLOADBALANCE', 'any');
+ensureEnv('PGYBSERVERSREFRESHINTERVAL', '5');
+ensureEnv('PGFAILEDHOSTRECONNECTDELAYSECS', '5');
+
 // Use @yugabytedb/pg if available, otherwise fall back to standard pg
 let Client;
 try {
@@ -12,7 +27,6 @@ try {
 } catch (e) {
   Client = require('pg').Client;
 }
-const path = require('path');
 
 const env = process.env.NODE_ENV || 'development';
 const baseConfig = require(path.join(__dirname, 'config', 'config.json'))[env];
@@ -20,7 +34,7 @@ const baseConfig = require(path.join(__dirname, 'config', 'config.json'))[env];
 // Parse the first host from comma-separated list if needed
 // Otherwise, simply choose one node for write operations
 const parseFirstHost = (hostString) => {
-  if (!hostString) return { host: '127.0.0.1', port: 5436 };
+  if (!hostString) return { host: '127.0.0.1', port: 5433 };
   
   // If comma-separated, take first entry
   const firstEntry = hostString.split(',')[0].trim();
@@ -38,11 +52,11 @@ const parseFirstHost = (hostString) => {
 let host, port;
 if (process.env.PGHOST) {
   host = process.env.PGHOST;
-  port = process.env.PGPORT ? Number(process.env.PGPORT) : 5436;
+  port = process.env.PGPORT ? Number(process.env.PGPORT) : 5433;
 } else {
   const parsed = parseFirstHost(baseConfig.host);
   host = parsed.host;
-  port = parsed.port || Number(baseConfig.port) || 5436;
+  port = parsed.port || Number(baseConfig.port) || 5433;
 }
 
 const database = process.env.PGDATABASE || baseConfig.database || 'ysql_sequelize';

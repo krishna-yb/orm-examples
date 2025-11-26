@@ -9,22 +9,18 @@ require('dotenv').config();
  * 
  * 1. Standard PostgreSQL variables:
  *    - PGHOST: Database host (e.g., "127.0.0.1")
- *    - PGPORT: Database port (default: 5436)
+ *    - PGPORT: Database port (default: 5433)
+ * 
  *    - PGUSER: Database user (default: yugabyte)
  *    - PGPASSWORD: Database password (default: yugabyte)
  *    - PGDATABASE: Database name (default: ysql_sequelize)
  * 
- * 2. Multi-host configuration via config.json:
- *    - For YugabyteDB multi-node load balancing, specify multiple hosts in config.json:
- *      "host": "127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436"
- *    - Environment variable PGHOST takes precedence over config.json
- * 
- * 3. YugabyteDB load balancing variables (extensions to standard PostgreSQL):
- *    - PGLOADBALANCE: Load balancing mode (any, only-primary, prefer-primary, prefer-rr, only-rr)
- *    - PGTOPOLOGYKEYS: Topology awareness keys (e.g., "cloud.region.zone")
+ * 2. Environment variables for the load balancing properties:
+ *    - PGLOADBALANCE: Enable load balancing (Valid values: any, only-primary, prefer-primary, prefer-rr, only-rr)
+ *    - PGTOPOLOGYKEYS: Specify the node placements to target (regions/zones) (e.g., "aws.us-east-1.us-east-1a")
  *    - PGFALLBACKTOTOPOLOGYKEYSONLY: Fallback to topology keys only (default: false)
  *    - PGYBSERVERSREFRESHINTERVAL: Metadata refresh interval in seconds (default: 5)
- *    - PGFAILEDHOSTRECONNECTDELAYSECS: Reconnect delay in seconds (default: 5)
+ *    - PGFAILEDHOSTRECONNECTDELAYSECS: Delay in reconnecting to failed hosts, in seconds (default: 5)
  */
 
 const fs = require('fs');
@@ -41,7 +37,7 @@ const baseConfig = require(path.join(__dirname, '..', 'config', 'config.json'))[
 
 const db = {};
 
-const DEFAULT_YB_PORT = 5436;
+const DEFAULT_YB_PORT = 5433;
 
 const normalizeBooleanEnv = value =>
   typeof value === 'string' ? value.toLowerCase() === 'true' : Boolean(value);
@@ -68,7 +64,7 @@ const HOSTS = (() => {
 
   if (baseConfig.host) {
     // config.json can specify single host or comma-separated multi-host for load balancing
-    // Examples: "127.0.0.1" or "127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436"
+    // Examples: "127.0.0.1" or "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433"
     const hostSpec =
       baseConfig.port && !String(baseConfig.host).includes(':')
         ? `${baseConfig.host}:${baseConfig.port}`
@@ -76,16 +72,11 @@ const HOSTS = (() => {
     return parseHosts(hostSpec);
   }
 
-  // Default to the local 3-node setup (127.0.0.[1-3]:5436) provisioned in docs.
-  return parseHosts('127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436');
+  // Default to the local 3-node setup (127.0.0.[1-3]:5433) provisioned in docs.
+  return parseHosts('127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433');
 })();
 
-// Load balance mode options: 
-// - 'any': Uses all nodes, least-loaded selection (best for reliability)
-// - 'prefer-rr': Tries read replicas first, falls back to primary
-// - 'only-rr': Only uses read replicas
-// - 'only-primary': Only uses primary nodes
-// - 'prefer-primary': Prefers primary, falls back to read replicas
+// Load balance mode: any, prefer-primary, prefer-rr, only-primary, only-rr
 const READ_LOAD_BALANCE_MODE = process.env.PGLOADBALANCE || "any";
 
 // Optional topology awareness and driver tuning (only set if needed)
@@ -167,9 +158,7 @@ function createSequelizeWithConnectionString() {
     `postgres://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${database}` +
     `?loadBalance=${READ_LOAD_BALANCE_MODE}` +
     (TOPOLOGY_KEYS ? `&topologyKeys=${encodeURIComponent(TOPOLOGY_KEYS)}` : '') +
-    `&ybServersRefreshInterval=${SERVER_REFRESH_INTERVAL}` +
-    `&failedHostReconnectDelaySecs=${FAILED_HOST_RECONNECT_DELAY_SECS}` +
-    (FALLBACK_TO_TOPOLOGY_KEYS_ONLY ? `&fallbackToTopologyKeysOnly=true` : '');
+    `&ybServersRefreshInterval=${SERVER_REFRESH_INTERVAL}`;
   
   const logLevel = (process.env.LOG_LEVEL || '').toLowerCase();
   const loggingType = logLevel === 'silly' ? console.log : false;

@@ -36,31 +36,14 @@ Most settings come from environment variables (e.g. `PGHOST`, `PGLOADBALANCE`) o
 | `database` | Database name. | `ysql_sequelize` |
 
 Environment examples (using standard PostgreSQL variables):
-```
+```bash
 # Database connection (standard PostgreSQL variables)
 export PGHOST=127.0.0.1
-export PGPORT=5436
+export PGPORT=5433
 export PGUSER=yugabyte
 export PGPASSWORD=yugabyte
 export PGDATABASE=ysql_sequelize
 
-# Load balancing configuration (YugabyteDB extensions)
+# Load balancing configuration
 export PGLOADBALANCE=any
-export PGWRITELOADBALANCE=only-primary
-
-# Optional: Topology awareness
-export PGTOPOLOGYKEYS=cloud.region.zone
-```
-
-For multi-host load balancing, configure the `host` field in `config/config.json`:
-```json
-{
-  "development": {
-    "host": "127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436",
-    "username": "yugabyte",
-    "password": "yugabyte",
-    "database": "ysql_sequelize",
-    "port": "5436"
-  }
-}
 ```
