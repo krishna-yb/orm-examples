@@ -8,17 +8,16 @@ require('dotenv').config();
  * Configuration via environment variables (in order of precedence):
  * 
  * 1. Standard PostgreSQL variables:
- *    - PGHOST: Single database host (e.g., "127.0.0.1")
+ *    - PGHOST: Database host (e.g., "127.0.0.1")
  *    - PGPORT: Database port (default: 5436)
  *    - PGUSER: Database user (default: yugabyte)
  *    - PGPASSWORD: Database password (default: yugabyte)
  *    - PGDATABASE: Database name (default: ysql_sequelize)
  * 
- * 2. Custom multi-host variable (for YugabyteDB load balancing):
- *    - PGHOSTS: Comma-separated list of host:port (e.g., "127.0.0.1:5436,127.0.0.2:5436")
- *               Note: This is a CUSTOM variable (not standard PostgreSQL) needed for YugabyteDB's 
- *               topology-aware load balancing across multiple nodes. Standard PostgreSQL's PGHOST 
- *               only supports a single host. PGHOSTS takes precedence over PGHOST when set.
+ * 2. Multi-host configuration via config.json:
+ *    - For YugabyteDB multi-node load balancing, specify multiple hosts in config.json:
+ *      "host": "127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436"
+ *    - Environment variable PGHOST takes precedence over config.json
  * 
  * 3. YugabyteDB load balancing variables (extensions to standard PostgreSQL):
  *    - PGLOADBALANCE: Read load balancing mode (any, only-primary, prefer-primary, prefer-rr, only-rr)
@@ -64,18 +63,15 @@ const parseHosts = rawHosts =>
     });
 
 const HOSTS = (() => {
-  // Check for PGHOSTS first (comma-separated list), then PGHOST (single host)
-  if (process.env.PGHOSTS) {
-    return parseHosts(process.env.PGHOSTS);
-  }
-  
+  // Priority: PGHOST env var > config.json > default 3-node setup
   if (process.env.PGHOST) {
     const port = process.env.PGPORT || DEFAULT_YB_PORT;
     return parseHosts(`${process.env.PGHOST}:${port}`);
   }
 
   if (baseConfig.host) {
-    // Allow config.json to specify a single host or host:port entry.
+    // config.json can specify single host or comma-separated multi-host for load balancing
+    // Examples: "127.0.0.1" or "127.0.0.1:5436,127.0.0.2:5436,127.0.0.3:5436"
     const hostSpec =
       baseConfig.port && !String(baseConfig.host).includes(':')
         ? `${baseConfig.host}:${baseConfig.port}`
