@@ -14,13 +14,17 @@ require('dotenv').config();
  *    - PGPASSWORD: Database password (default: yugabyte)
  *    - PGDATABASE: Database name (default: ysql_sequelize)
  * 
- * 2. Custom multi-host variable (for load balancing):
+ * 2. Custom multi-host variable (for YugabyteDB load balancing):
  *    - PGHOSTS: Comma-separated list of host:port (e.g., "127.0.0.1:5436,127.0.0.2:5436")
- *               Note: This is a custom variable, not standard PostgreSQL. Takes precedence over PGHOST.
+ *               Note: This is a CUSTOM variable (not standard PostgreSQL) needed for YugabyteDB's 
+ *               topology-aware load balancing across multiple nodes. Standard PostgreSQL's PGHOST 
+ *               only supports a single host. PGHOSTS takes precedence over PGHOST when set.
  * 
  * 3. YugabyteDB load balancing variables (extensions to standard PostgreSQL):
  *    - PGLOADBALANCE: Read load balancing mode (any, only-primary, prefer-primary, prefer-rr, only-rr)
- *    - PGWRITELOADBALANCE: Write load balancing mode (default: only-primary)
+ *    - PGWRITELOADBALANCE: Sets the loadBalance property for write connections (default: only-primary)
+ *                          Note: This is NOT a standard YugabyteDB environment variable, it's a custom
+ *                          extension for this example to separately control write load balancing behavior.
  *    - PGTOPOLOGYKEYS: Optional topology awareness keys
  *    - PGFALLBACKTOTOPOLOGYKEYSONLY: Optional fallback to topology keys only (default: false)
  *    - PGYBSERVERSREFRESHINTERVAL: Optional metadata refresh interval in seconds (default: 5)
@@ -162,12 +166,7 @@ function createSmartSequelizeInstance() {
   });
 }
 
-/**
- * Alternative: Using Connection String
- * 
- * This creates a simpler single-connection instance using a PostgreSQL connection URL.
- * Load balancing parameters are passed as query parameters in the URL.
- */
+// Alternative: Using Connection String
 function createSequelizeWithConnectionString() {
   const username = process.env.PGUSER || baseConfig.username || 'yugabyte';
   const password = process.env.PGPASSWORD || (baseConfig.password && baseConfig.password !== '' ? baseConfig.password : 'yugabyte');

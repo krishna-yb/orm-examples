@@ -17,46 +17,20 @@ const path = require('path');
 const env = process.env.NODE_ENV || 'development';
 const baseConfig = require(path.join(__dirname, 'config', 'config.json'))[env];
 
-// Parse PGHOSTS (custom, comma-separated) or PGHOST (standard, single host) or use config defaults
-const parseHosts = (rawHosts) => {
-  if (!rawHosts) {
-    return [{ host: baseConfig.host || '127.0.0.1', port: Number(baseConfig.port) || 5436 }];
-  }
-  return rawHosts
-    .split(',')
-    .map(entry => entry.trim())
-    .filter(Boolean)
-    .map(entry => {
-      const [host, port = baseConfig.port || '5436'] = entry.split(':');
-      return { host, port: Number(port) };
-    });
-};
-
-const HOSTS = (() => {
-  // Check for PGHOSTS first (comma-separated list), then PGHOST (single host)
-  if (process.env.PGHOSTS) {
-    return parseHosts(process.env.PGHOSTS);
-  }
-  
-  if (process.env.PGHOST) {
-    const port = process.env.PGPORT || baseConfig.port || '5436';
-    return parseHosts(`${process.env.PGHOST}:${port}`);
-  }
-  
-  // Fall back to config
-  return parseHosts(`${baseConfig.host || '127.0.0.1'}:${baseConfig.port || 5436}`);
-})();
+// Determine the host and port to connect to
+// Priority: PGHOST (standard PostgreSQL) > config.json
+const host = process.env.PGHOST || baseConfig.host || '127.0.0.1';
+const port = process.env.PGPORT ? Number(process.env.PGPORT) : (Number(baseConfig.port) || 5436);
 
 const database = process.env.PGDATABASE || baseConfig.database || 'ysql_sequelize';
 const username = process.env.PGUSER || baseConfig.username || 'yugabyte';
 const password = process.env.PGPASSWORD || baseConfig.password || 'yugabyte';
 
 async function ensureDatabase() {
-  // Try to connect to the first host using the default 'yugabyte' database
-  const primaryHost = HOSTS[0];
+  // Try to connect using the default 'yugabyte' database
   const adminClient = new Client({
-    host: primaryHost.host,
-    port: primaryHost.port,
+    host: host,
+    port: port,
     user: username,
     password: password,
     database: 'yugabyte',
@@ -64,7 +38,7 @@ async function ensureDatabase() {
 
   try {
     await adminClient.connect();
-    console.log(`Connected to ${HOSTS[0].host}:${HOSTS[0].port}`);
+    console.log(`Connected to ${host}:${port}`);
 
     // Check if database exists
     const result = await adminClient.query(
