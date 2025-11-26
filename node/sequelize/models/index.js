@@ -98,6 +98,32 @@ const FALLBACK_TO_TOPOLOGY_KEYS_ONLY = normalizeBooleanEnv(process.env.PGFALLBAC
 const SERVER_REFRESH_INTERVAL = process.env.PGYBSERVERSREFRESHINTERVAL ? Number(process.env.PGYBSERVERSREFRESHINTERVAL) : 5;
 const FAILED_HOST_RECONNECT_DELAY_SECS = process.env.PGFAILEDHOSTRECONNECTDELAYSECS ? Number(process.env.PGFAILEDHOSTRECONNECTDELAYSECS) : 5;
 
+// Utility function to set environment variables if not already set
+// The @yugabytedb/pg driver reads these directly from process.env/environment variables
+const ensureEnv = (key, value) => {
+  if (
+    typeof value !== 'undefined' &&
+    value !== null &&
+    value !== '' &&
+    !process.env[key]
+  ) {
+    process.env[key] = String(value);
+  }
+};
+
+// Set environment variables for @yugabytedb/pg driver
+ensureEnv('PGLOADBALANCE', READ_LOAD_BALANCE_MODE);
+ensureEnv('PGTOPOLOGYKEYS', TOPOLOGY_KEYS);
+ensureEnv(
+  'PGFALLBACKTOTOPOLOGYKEYSONLY', 
+  FALLBACK_TO_TOPOLOGY_KEYS_ONLY ? 'true' : undefined,
+);
+ensureEnv('PGYBSERVERSREFRESHINTERVAL', SERVER_REFRESH_INTERVAL);
+ensureEnv(
+  'PGFAILEDHOSTRECONNECTDELAYSECS',
+  FAILED_HOST_RECONNECT_DELAY_SECS,
+);
+
 const SMART_DRIVER_DEFAULTS = {
   ...(TOPOLOGY_KEYS ? { topologyKeys: TOPOLOGY_KEYS } : {}),
   ...(FALLBACK_TO_TOPOLOGY_KEYS_ONLY
@@ -125,31 +151,19 @@ function createSmartSequelizeInstance() {
       ? console.log
       : false;
 
-  // Use all hosts for read replicas (load balancing will handle node selection)
-  const readReplicas = HOSTS;
-
-  const buildConnectionConfig = ({ host, port }, loadBalanceValue) => ({
-    host,
-    port,
-    username,
-    password,
-    database,
-    loadBalance: loadBalanceValue,
-    ...SMART_DRIVER_DEFAULTS,
-  });
-
-  return new Sequelize({
+  // Use single connection with YugabyteDB smart driver for automatic load balancing
+  // The driver will discover all nodes and distribute queries automatically
+  return new Sequelize(database, username, password, {
+    host: primaryHost.host,
+    port: primaryHost.port,
     dialect: 'postgres',
-    database,
-    username,
-    password,
     logging: loggingType,
-    replication: {
-      write: buildConnectionConfig(primaryHost, WRITE_LOAD_BALANCE_MODE),
-      read: readReplicas.map(node =>
-        buildConnectionConfig(node, READ_LOAD_BALANCE_MODE),
-      ),
-    },
+    // YugabyteDB smart driver properties must be at top level, not in dialectOptions
+    loadBalance: READ_LOAD_BALANCE_MODE,
+    topologyKeys: TOPOLOGY_KEYS,
+    fallbackToTopologyKeysOnly: FALLBACK_TO_TOPOLOGY_KEYS_ONLY,
+    ybServersRefreshInterval: SERVER_REFRESH_INTERVAL,
+    failedHostReconnectDelaySecs: FAILED_HOST_RECONNECT_DELAY_SECS,
     pool: {
       max: 10,
       min: 2,

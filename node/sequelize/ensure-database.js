@@ -17,10 +17,33 @@ const path = require('path');
 const env = process.env.NODE_ENV || 'development';
 const baseConfig = require(path.join(__dirname, 'config', 'config.json'))[env];
 
+// Parse the first host from comma-separated list if needed
+// Otherwise, simply choose one node for write operations
+const parseFirstHost = (hostString) => {
+  if (!hostString) return { host: '127.0.0.1', port: 5436 };
+  
+  // If comma-separated, take first entry
+  const firstEntry = hostString.split(',')[0].trim();
+  
+  // Parse host:port
+  const [host, port] = firstEntry.split(':');
+  return {
+    host: host,
+    port: port ? Number(port) : null
+  };
+};
+
 // Determine the host and port to connect to
 // Priority: PGHOST (standard PostgreSQL) > config.json
-const host = process.env.PGHOST || baseConfig.host || '127.0.0.1';
-const port = process.env.PGPORT ? Number(process.env.PGPORT) : (Number(baseConfig.port) || 5436);
+let host, port;
+if (process.env.PGHOST) {
+  host = process.env.PGHOST;
+  port = process.env.PGPORT ? Number(process.env.PGPORT) : 5436;
+} else {
+  const parsed = parseFirstHost(baseConfig.host);
+  host = parsed.host;
+  port = parsed.port || Number(baseConfig.port) || 5436;
+}
 
 const database = process.env.PGDATABASE || baseConfig.database || 'ysql_sequelize';
 const username = process.env.PGUSER || baseConfig.username || 'yugabyte';
