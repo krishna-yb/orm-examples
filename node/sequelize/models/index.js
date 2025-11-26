@@ -20,14 +20,11 @@ require('dotenv').config();
  *    - Environment variable PGHOST takes precedence over config.json
  * 
  * 3. YugabyteDB load balancing variables (extensions to standard PostgreSQL):
- *    - PGLOADBALANCE: Read load balancing mode (any, only-primary, prefer-primary, prefer-rr, only-rr)
- *    - PGWRITELOADBALANCE: Sets the loadBalance property for write connections (default: only-primary)
- *                          Note: This is NOT a standard YugabyteDB environment variable, it's a custom
- *                          extension for this example to separately control write load balancing behavior.
- *    - PGTOPOLOGYKEYS: Optional topology awareness keys
- *    - PGFALLBACKTOTOPOLOGYKEYSONLY: Optional fallback to topology keys only (default: false)
- *    - PGYBSERVERSREFRESHINTERVAL: Optional metadata refresh interval in seconds (default: 5)
- *    - PGFAILEDHOSTRECONNECTDELAYSECS: Optional reconnect delay in seconds (default: 5)
+ *    - PGLOADBALANCE: Load balancing mode (any, only-primary, prefer-primary, prefer-rr, only-rr)
+ *    - PGTOPOLOGYKEYS: Topology awareness keys (e.g., "cloud.region.zone")
+ *    - PGFALLBACKTOTOPOLOGYKEYSONLY: Fallback to topology keys only (default: false)
+ *    - PGYBSERVERSREFRESHINTERVAL: Metadata refresh interval in seconds (default: 5)
+ *    - PGFAILEDHOSTRECONNECTDELAYSECS: Reconnect delay in seconds (default: 5)
  */
 
 const fs = require('fs');
@@ -84,13 +81,12 @@ const HOSTS = (() => {
 })();
 
 // Load balance mode options: 
-// - 'any': Uses all nodes, least-loaded selection works immediately (best for reliability)
-// - 'prefer-rr': Tries read replicas first, falls back to primary if RR unavailable
-// - 'only-rr': Only uses read replicas (requires metadata refresh, may fail on first connection)
-// - 'only-primary': Only uses primary nodes (for writes)
-// - 'prefer-primary': Prefers primary, falls back to RR
+// - 'any': Uses all nodes, least-loaded selection (best for reliability)
+// - 'prefer-rr': Tries read replicas first, falls back to primary
+// - 'only-rr': Only uses read replicas
+// - 'only-primary': Only uses primary nodes
+// - 'prefer-primary': Prefers primary, falls back to read replicas
 const READ_LOAD_BALANCE_MODE = process.env.PGLOADBALANCE || "any";
-const WRITE_LOAD_BALANCE_MODE = process.env.PGWRITELOADBALANCE || "only-primary";
 
 // Optional topology awareness and driver tuning (only set if needed)
 const TOPOLOGY_KEYS = process.env.PGTOPOLOGYKEYS || "";
@@ -99,7 +95,7 @@ const SERVER_REFRESH_INTERVAL = process.env.PGYBSERVERSREFRESHINTERVAL ? Number(
 const FAILED_HOST_RECONNECT_DELAY_SECS = process.env.PGFAILEDHOSTRECONNECTDELAYSECS ? Number(process.env.PGFAILEDHOSTRECONNECTDELAYSECS) : 5;
 
 // Utility function to set environment variables if not already set
-// The @yugabytedb/pg driver reads these directly from process.env/environment variables
+// The @yugabytedb/pg driver reads these directly from process.env
 const ensureEnv = (key, value) => {
   if (
     typeof value !== 'undefined' &&
@@ -124,19 +120,6 @@ ensureEnv(
   FAILED_HOST_RECONNECT_DELAY_SECS,
 );
 
-const SMART_DRIVER_DEFAULTS = {
-  ...(TOPOLOGY_KEYS ? { topologyKeys: TOPOLOGY_KEYS } : {}),
-  ...(FALLBACK_TO_TOPOLOGY_KEYS_ONLY
-    ? { fallbackToTopologyKeysOnly: true }
-    : {}),
-  ...(Number.isFinite(SERVER_REFRESH_INTERVAL)
-    ? { ybServersRefreshInterval: SERVER_REFRESH_INTERVAL }
-    : {}),
-  ...(Number.isFinite(FAILED_HOST_RECONNECT_DELAY_SECS)
-    ? { failedHostReconnectDelaySecs: FAILED_HOST_RECONNECT_DELAY_SECS }
-    : {}),
-};
-
 function createSmartSequelizeInstance() {
   const [primaryHost] = HOSTS;
 
@@ -151,19 +134,13 @@ function createSmartSequelizeInstance() {
       ? console.log
       : false;
 
-  // Use single connection with YugabyteDB smart driver for automatic load balancing
-  // The driver will discover all nodes and distribute queries automatically
+  // Use YugabyteDB smart driver for automatic load balancing
+  // Driver reads config from process.env/environment variables (set via ensureEnv) and discovers all nodes
   return new Sequelize(database, username, password, {
     host: primaryHost.host,
     port: primaryHost.port,
     dialect: 'postgres',
     logging: loggingType,
-    // YugabyteDB smart driver properties must be at top level, not in dialectOptions
-    loadBalance: READ_LOAD_BALANCE_MODE,
-    topologyKeys: TOPOLOGY_KEYS,
-    fallbackToTopologyKeysOnly: FALLBACK_TO_TOPOLOGY_KEYS_ONLY,
-    ybServersRefreshInterval: SERVER_REFRESH_INTERVAL,
-    failedHostReconnectDelaySecs: FAILED_HOST_RECONNECT_DELAY_SECS,
     pool: {
       max: 10,
       min: 2,
@@ -176,7 +153,7 @@ function createSmartSequelizeInstance() {
   });
 }
 
-// Alternative: Using Connection String
+// Alternative method: Using Connection String
 function createSequelizeWithConnectionString() {
   const username = process.env.PGUSER || baseConfig.username || 'yugabyte';
   const password = process.env.PGPASSWORD || (baseConfig.password && baseConfig.password !== '' ? baseConfig.password : 'yugabyte');
@@ -197,8 +174,6 @@ function createSequelizeWithConnectionString() {
   const logLevel = (process.env.LOG_LEVEL || '').toLowerCase();
   const loggingType = logLevel === 'silly' ? console.log : false;
   
-  console.log(`Connection string (sanitized): postgres://${username}:****@${host}:${port}/${database}?loadBalance=${READ_LOAD_BALANCE_MODE}...`);
-  
   return new Sequelize(connectionString, {
     dialect: 'postgres',
     logging: loggingType,
@@ -216,7 +191,7 @@ function createSequelizeWithConnectionString() {
 
 // Choose which method to use:
 const sequelize = createSmartSequelizeInstance();
-// Uncomment to use connection string instead:
+// Alternative: Uncomment to use connection string instead:
 // const sequelize = createSequelizeWithConnectionString();
 
 fs
