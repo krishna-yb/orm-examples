@@ -48,7 +48,7 @@ const parseFirstHost = (hostString) => {
 };
 
 // Determine the host and port to connect to
-// Priority: PGHOST (standard PostgreSQL) > config.json
+// Priority: PGHOST/PGPORT env vars > config.json
 let host, port;
 if (process.env.PGHOST) {
   host = process.env.PGHOST;
@@ -56,7 +56,8 @@ if (process.env.PGHOST) {
 } else {
   const parsed = parseFirstHost(baseConfig.host);
   host = parsed.host;
-  port = parsed.port || Number(baseConfig.port) || 5433;
+  // PGPORT env var takes precedence over parsed or config port
+  port = process.env.PGPORT ? Number(process.env.PGPORT) : (parsed.port || Number(baseConfig.port) || 5433);
 }
 
 const database = process.env.PGDATABASE || baseConfig.database || 'ysql_sequelize';

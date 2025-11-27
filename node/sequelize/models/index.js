@@ -56,12 +56,13 @@ const parseHosts = rawHosts =>
     });
 
 const HOSTS = (() => {
-  // Priority: PGHOST env var > config.json > default 3-node setup
+  // Priority: PGHOST/PGPORT env vars > config.json > default 3-node setup
   if (process.env.PGHOST) {
     const port = process.env.PGPORT || DEFAULT_YB_PORT;
     return parseHosts(`${process.env.PGHOST}:${port}`);
   }
 
+  let hosts;
   if (baseConfig.host) {
     // config.json can specify single host or comma-separated multi-host for load balancing
     // Examples: "127.0.0.1" or "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433"
@@ -69,11 +70,19 @@ const HOSTS = (() => {
       baseConfig.port && !String(baseConfig.host).includes(':')
         ? `${baseConfig.host}:${baseConfig.port}`
         : baseConfig.host;
-    return parseHosts(hostSpec);
+    hosts = parseHosts(hostSpec);
+  } else {
+    // Default to the local 3-node setup (127.0.0.[1-3]:5433) provisioned in docs.
+    hosts = parseHosts('127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433');
   }
 
-  // Default to the local 3-node setup (127.0.0.[1-3]:5433) provisioned in docs.
-  return parseHosts('127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433');
+  // PGPORT env var overrides all port values
+  if (process.env.PGPORT) {
+    const overridePort = Number(process.env.PGPORT);
+    hosts = hosts.map(h => ({ ...h, port: overridePort }));
+  }
+
+  return hosts;
 })();
 
 // Load balance mode: any, prefer-primary, prefer-rr, only-primary, only-rr
